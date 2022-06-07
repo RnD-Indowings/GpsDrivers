@@ -532,7 +532,7 @@ int GPSDriverUBX::configureDevice(const GNSSSystemsMask &gnssSystems)
 	// measurement rate
 	// In case of F9P we use 10Hz, otherwise 8Hz (receivers such as M9N can go higher as well, but
 	// the number of used satellites will be restricted to 16. Not mentioned in datasheet)
-	const int rate_meas = (_board == Board::u_blox9_F9P) ? 100 : 125;
+	const int rate_meas = 125;//(_board == Board::u_blox9_F9P) ? 100 : 125;
 	cfgValset<uint16_t>(UBX_CFG_KEY_RATE_MEAS, rate_meas, cfg_valset_msg_size);
 	cfgValset<uint16_t>(UBX_CFG_KEY_RATE_NAV, 1, cfg_valset_msg_size);
 	cfgValset<uint8_t>(UBX_CFG_KEY_RATE_TIMEREF, 0, cfg_valset_msg_size);
@@ -664,7 +664,7 @@ int GPSDriverUBX::configureDevice(const GNSSSystemsMask &gnssSystems)
 		}
 	}
 
-	int uart2_baudrate = 230400;
+	int uart2_baudrate = 460800;
 
 	if (_mode == UBXMode::RoverWithMovingBase) {
 		UBX_DEBUG("Configuring UART2 for rover");
@@ -719,6 +719,34 @@ int GPSDriverUBX::configureDevice(const GNSSSystemsMask &gnssSystems)
 		if (waitForAck(UBX_MSG_CFG_VALSET, UBX_CONFIG_TIMEOUT, true) < 0) {
 			return -1;
 		}
+	}
+
+	// enable RTCM output on uart2 + set baudrate
+	cfg_valset_msg_size = initCfgValset();
+	cfgValset<uint8_t>(UBX_CFG_KEY_CFG_UART2_STOPBITS, 1, cfg_valset_msg_size);
+	cfgValset<uint8_t>(UBX_CFG_KEY_CFG_UART2_DATABITS, 0, cfg_valset_msg_size);
+	cfgValset<uint8_t>(UBX_CFG_KEY_CFG_UART2_PARITY, 0, cfg_valset_msg_size);
+	cfgValset<uint8_t>(UBX_CFG_KEY_CFG_UART2INPROT_UBX, 0, cfg_valset_msg_size);
+	cfgValset<uint8_t>(UBX_CFG_KEY_CFG_UART2INPROT_RTCM3X, 0, cfg_valset_msg_size);
+	cfgValset<uint8_t>(UBX_CFG_KEY_CFG_UART2INPROT_NMEA, 0, cfg_valset_msg_size);
+	cfgValset<uint8_t>(UBX_CFG_KEY_CFG_UART2OUTPROT_UBX, 0, cfg_valset_msg_size);
+	cfgValset<uint8_t>(UBX_CFG_KEY_CFG_UART2OUTPROT_RTCM3X, 1, cfg_valset_msg_size);
+	cfgValset<uint32_t>(UBX_CFG_KEY_CFG_UART2_BAUDRATE, uart2_baudrate, cfg_valset_msg_size);
+
+	cfgValset<uint8_t>(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE4072_0_UART2, 1, cfg_valset_msg_size);
+	cfgValset<uint8_t>(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE4072_1_UART2, 1, cfg_valset_msg_size);
+	cfgValset<uint8_t>(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1074_UART2, 1, cfg_valset_msg_size);
+	cfgValset<uint8_t>(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1084_UART2, 1, cfg_valset_msg_size);
+	cfgValset<uint8_t>(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1094_UART2, 1, cfg_valset_msg_size);
+	cfgValset<uint8_t>(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1124_UART2, 1, cfg_valset_msg_size);
+	cfgValset<uint8_t>(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1230_UART2, 1, cfg_valset_msg_size);
+
+	if (!sendMessage(UBX_MSG_CFG_VALSET, (uint8_t *)&_buf, cfg_valset_msg_size)) {
+		return -1;
+	}
+
+	if (waitForAck(UBX_MSG_CFG_VALSET, UBX_CONFIG_TIMEOUT, true) < 0) {
+		return -1;
 	}
 
 	return 0;
@@ -861,11 +889,11 @@ int GPSDriverUBX::restartSurveyIn()
 	//disable RTCM output
 	int cfg_valset_msg_size = initCfgValset();
 	cfgValsetPort(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1005_I2C, 0, cfg_valset_msg_size);
-	cfgValsetPort(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1077_I2C, 0, cfg_valset_msg_size);
-	cfgValsetPort(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1087_I2C, 0, cfg_valset_msg_size);
+	cfgValsetPort(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1074_I2C, 0, cfg_valset_msg_size);
+	cfgValsetPort(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1084_I2C, 0, cfg_valset_msg_size);
 	cfgValsetPort(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1230_I2C, 0, cfg_valset_msg_size);
-	cfgValsetPort(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1097_I2C, 0, cfg_valset_msg_size);
-	cfgValsetPort(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1127_I2C, 0, cfg_valset_msg_size);
+	cfgValsetPort(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1094_I2C, 0, cfg_valset_msg_size);
+	cfgValsetPort(UBX_CFG_KEY_MSGOUT_RTCM_3X_TYPE1124_I2C, 0, cfg_valset_msg_size);
 	sendMessage(UBX_MSG_CFG_VALSET, (uint8_t *)&_buf, cfg_valset_msg_size);
 	waitForAck(UBX_MSG_CFG_VALSET, UBX_CONFIG_TIMEOUT, false);
 
