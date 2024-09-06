@@ -1757,7 +1757,7 @@ GPSDriverUBX::payloadRxDone()
 
 		_gps_position->lat		= _buf.payload_rx_nav_pvt.lat;
 		_gps_position->lon		= _buf.payload_rx_nav_pvt.lon;
-		_gps_position->alt		= _buf.payload_rx_nav_pvt.hMSL;
+		_gps_position->alt		= _buf.payload_rx_nav_pvt.height;
 		_gps_position->alt_ellipsoid	= _buf.payload_rx_nav_pvt.height;
 
 		_gps_position->eph		= static_cast<float>(_buf.payload_rx_nav_pvt.hAcc) * 1e-3f;
