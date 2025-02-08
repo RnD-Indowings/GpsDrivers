@@ -40,6 +40,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include "../../definitions.h"
 
 #ifndef GPS_READ_BUFFER_SIZE
@@ -84,6 +85,14 @@ enum class GPSCallbackType {
 	 * return: ignored
 	 */
 	gotRTCMMessage,
+
+	/**
+	 * Got a relative position message from the device.
+	 * data1: pointer to the message
+	 * data2: message length
+	 * return: ignored
+	 */
+	gotRelativePositionMessage,
 
 	/**
 	 * message about current survey-in status
@@ -175,9 +184,20 @@ public:
 		ENABLE_GLONASS =    1 << 4
 	};
 
+	enum class InterfaceProtocolsMask : int32_t {
+		ALL_DISABLED =        0,
+		I2C_IN_PROT_UBX =     1 << 0,
+		I2C_IN_PROT_NMEA =    1 << 1,
+		I2C_IN_PROT_RTCM3X =  1 << 2,
+		I2C_OUT_PROT_UBX =    1 << 3,
+		I2C_OUT_PROT_NMEA =   1 << 4,
+		I2C_OUT_PROT_RTCM3X = 1 << 5
+	};
+
 	struct GPSConfig {
 		OutputMode output_mode;
 		GNSSSystemsMask gnss_systems;
+		InterfaceProtocolsMask interface_protocols;
 	};
 
 
@@ -234,7 +254,7 @@ protected:
 	 */
 	int read(uint8_t *buf, int buf_length, int timeout)
 	{
-		*((int *)buf) = timeout;
+		memcpy(buf, &timeout, sizeof(timeout));
 		return _callback(GPSCallbackType::readDeviceData, buf, buf_length, _callback_user);
 	}
 
@@ -270,6 +290,12 @@ protected:
 		_callback(GPSCallbackType::gotRTCMMessage, buf, buf_length, _callback_user);
 	}
 
+	/** got a relative position message from the device */
+	void gotRelativePositionMessage(sensor_gnss_relative_s &gnss_relative)
+	{
+		_callback(GPSCallbackType::gotRelativePositionMessage, &gnss_relative, sizeof(sensor_gnss_relative_s), _callback_user);
+	}
+
 	void setClock(timespec &t)
 	{
 		_callback(GPSCallbackType::setClock, &t, 0, _callback_user);
@@ -300,6 +326,11 @@ protected:
 };
 
 inline bool operator&(GPSHelper::GNSSSystemsMask a, GPSHelper::GNSSSystemsMask b)
+{
+	return static_cast<int32_t>(a) & static_cast<int32_t>(b);
+}
+
+inline bool operator&(GPSHelper::InterfaceProtocolsMask a, GPSHelper::InterfaceProtocolsMask b)
 {
 	return static_cast<int32_t>(a) & static_cast<int32_t>(b);
 }

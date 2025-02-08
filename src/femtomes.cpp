@@ -40,6 +40,7 @@
 
 #include "femtomes.h"
 #include "rtcm.h"
+#include "crc.h"
 
 
 /* ms, timeout for waiting for a response*/
@@ -50,6 +51,7 @@
 #define FEMTO_MSG_ID_UAVGPS 		8001
 #define FEMTO_MSG_ID_RTCM3          784
 #define FEMTO_MSG_ID_GPGGA          218
+#define FEMTO_MSG_ID_UAVSTATUS		8017
 
 /* Femto uavgps message frame premble 3 bytes*/
 #define FEMTO_PREAMBLE1			0xaa
@@ -66,7 +68,7 @@
 #else
 #define FEMTO_INFO(...)			{(void)0;}
 #define FEMTO_DEBUG(...)		{(void)0;}
-#define FEMTO_ERR(...)			{(void)0;}
+#define FEMTO_ERR(...)			{GPS_WARN(__VA_ARGS__);}
 #endif
 
 
@@ -84,9 +86,7 @@ GPSDriverFemto::GPSDriverFemto(GPSCallbackPtr callback, void *callback_user,
 
 GPSDriverFemto::~GPSDriverFemto()
 {
-	if (_rtcm_parsing) {
-		delete (_rtcm_parsing);
-	}
+	delete _rtcm_parsing;
 }
 
 int GPSDriverFemto::handleMessage(int len)
@@ -98,10 +98,10 @@ int GPSDriverFemto::handleMessage(int len)
 		memcpy(&_femto_uav_gps, _femto_msg.data, sizeof(femto_uav_gps_t));
 
 		_gps_position->time_utc_usec = _femto_uav_gps.time_utc_usec;
-		_gps_position->lat = _femto_uav_gps.lat;
-		_gps_position->lon = _femto_uav_gps.lon;
-		_gps_position->alt = _femto_uav_gps.alt;
-		_gps_position->alt_ellipsoid = _femto_uav_gps.alt_ellipsoid;
+		_gps_position->latitude_deg = _femto_uav_gps.lat / 1e7;
+		_gps_position->longitude_deg = _femto_uav_gps.lon / 1e7;
+		_gps_position->altitude_msl_m = _femto_uav_gps.alt / 1e3;
+		_gps_position->altitude_ellipsoid_m = _femto_uav_gps.alt_ellipsoid / 1e3;
 		_gps_position->s_variance_m_s = _femto_uav_gps.s_variance_m_s;
 		_gps_position->c_variance_rad = _femto_uav_gps.c_variance_rad;
 		_gps_position->eph = _femto_uav_gps.eph;
@@ -139,14 +139,25 @@ int GPSDriverFemto::handleMessage(int len)
 
 		ret = 1;
 
-	} else if (messageid == FEMTO_MSG_ID_RTCM3) { /**< rtcm3 */
-		gotRTCMMessage(_rtcm_parsing->message(), _rtcm_parsing->messageLength());
-		decodeInit();
-		ret = 1;
+	} else if (_satellite_info && messageid == FEMTO_MSG_ID_UAVSTATUS) {	/**< set satellite info */
+		const femto_uav_status_t *uav_status = (const femto_uav_status_t *)_femto_msg.data;
+
+		_satellite_info->count = MIN(uav_status->sat_number, satellite_info_s::SAT_INFO_MAX_SATELLITES);
+
+		for (int8_t i = 0; i < _satellite_info->count; i++) {
+			_satellite_info->svid[i] = uav_status->sat_status[i].svid;
+			_satellite_info->used[i] = 1;
+			_satellite_info->elevation[i] = uav_status->sat_status[i].ele;
+			_satellite_info->azimuth[i] = uav_status->sat_status[i].azi;
+			_satellite_info->snr[i] = uav_status->sat_status[i].cn0;
+			_satellite_info->prn[i] = uav_status->sat_status[i].system_id;
+		}
+
+		ret = 2;
 
 	} else if (OutputMode::RTCM == _output_mode
 		   && messageid == FEMTO_MSG_ID_GPGGA
-		   && (memcmp(_femto_msg.data + 3, "GGA,", 3) == 0)) { /**< GPGGA only used in base station*/
+		   && (memcmp(_femto_msg.data + 3, "GGA,", 3) == 0)) { /**< GPGGA only used in base station, for survey-in */
 		int uiCalcComma = 0;
 
 		for (int i = 0 ; i < len; i++) {
@@ -385,9 +396,9 @@ int GPSDriverFemto::parseChar(uint8_t temp)
 				_femto_msg.crc += (uint32_t)(temp << 24);
 				_decode_state = FemtoDecodeState::pream_ble1;
 
-				uint32_t crc = calculateBlockCRC32((uint32_t)_femto_msg.header.femto_header.headerlength,
-								   (uint8_t *)&_femto_msg.header.data, (uint32_t)0);
-				crc = calculateBlockCRC32((uint32_t)_femto_msg.header.femto_header.messagelength, (uint8_t *)&_femto_msg.data[0], crc);
+				uint32_t crc = calculateCRC32((uint32_t)_femto_msg.header.femto_header.headerlength,
+							      (uint8_t *)&_femto_msg.header.data, (uint32_t)0);
+				crc = calculateCRC32((uint32_t)_femto_msg.header.femto_header.messagelength, (uint8_t *)&_femto_msg.data[0], crc);
 
 				if (_femto_msg.crc == crc) {
 					iRet = _femto_msg.read;
@@ -471,8 +482,8 @@ int GPSDriverFemto::parseChar(uint8_t temp)
 		case FemtoDecodeState::decode_rtcm3:
 			if (_rtcm_parsing->addByte(temp)) {
 				FEMTO_DEBUG("Femto: got RTCM message with length %i", (int)_rtcm_parsing->messageLength())
-				_femto_msg.header.femto_header.messageid  = FEMTO_MSG_ID_RTCM3;
-				iRet = _rtcm_parsing->messageLength();
+				gotRTCMMessage(_rtcm_parsing->message(), _rtcm_parsing->messageLength());
+				decodeInit();
 			}
 
 			break;
@@ -554,7 +565,7 @@ int GPSDriverFemto::configure(unsigned &baudrate, const GPSConfig &config)
 		FEMTO_DEBUG("Femto: baudrate set to %i", test_baudrate);
 
 		for (int run = 0; run < 2; ++run) { /** try several times*/
-			if (writeAckedCommandFemto("UNLOGALL\r\n", "<UNLOGALL OK", FEMTO_RESPONSE_TIMEOUT) == 0 &&
+			if (writeAckedCommandFemto("UNLOGALL THISPORT\r\n", "<UNLOGALL OK", FEMTO_RESPONSE_TIMEOUT) == 0 &&
 			    writeAckedCommandFemto("VERSION\r\n", "<VERSION OK", FEMTO_RESPONSE_TIMEOUT) == 0) {
 				FEMTO_DEBUG("Femto: got port for baudrate %i", test_baudrate);
 				success = true;
@@ -589,7 +600,7 @@ int GPSDriverFemto::configure(unsigned &baudrate, const GPSConfig &config)
 
 		for (int run = 0; run < 10; ++run) {
 			/** We ask for the port config again. If we get a reply, we know that the changed settings work.*/
-			if (writeAckedCommandFemto("UNLOGALL\r\n", "<UNLOGALL OK", FEMTO_RESPONSE_TIMEOUT) == 0 &&
+			if (writeAckedCommandFemto("UNLOGALL THISPORT\r\n", "<UNLOGALL OK", FEMTO_RESPONSE_TIMEOUT) == 0 &&
 			    writeAckedCommandFemto("VERSION\r\n", "<VERSION OK", FEMTO_RESPONSE_TIMEOUT) == 0) {
 				success = true;
 				break;
@@ -605,12 +616,30 @@ int GPSDriverFemto::configure(unsigned &baudrate, const GPSConfig &config)
 	}
 
 	if (_output_mode == OutputMode::GPS) {
-		if (writeAckedCommandFemto("LOG UAVGPSB 0.05\r\n", "<LOG OK", FEMTO_RESPONSE_TIMEOUT) == 0) {
-			FEMTO_DEBUG("Femto: command LOG UAVGPSB 0.05 success");
+		if (writeAckedCommandFemto("LOG UAVGPSB 0.1\r\n", "<LOG OK", FEMTO_RESPONSE_TIMEOUT) == 0) {
+			FEMTO_DEBUG("Femto: command LOG UAVGPSB 0.1 success");
+
+			/** 20Hz need authorization in femtomes device */
+			if (writeAckedCommandFemto("LOG UAVGPSB 0.05\r\n", "<LOG OK", FEMTO_RESPONSE_TIMEOUT) == 0) {
+				FEMTO_DEBUG("Femto: command LOG UAVGPSB 0.05 success");
+
+			} else {
+				FEMTO_ERR("Femto: command LOG UAVGPSB 0.05 failed,maybe no authorization");
+			}
 
 		} else {
-			FEMTO_DEBUG("Femto: command LOG UAVGPSB 0.05 failed");
+			FEMTO_ERR("Femto: command LOG UAVGPSB 0.1 failed");
 		}
+
+		if (_satellite_info) {
+			if (writeAckedCommandFemto("LOG UAVSTATUSB 1\r\n", "<LOG OK", FEMTO_RESPONSE_TIMEOUT) == 0) {
+				FEMTO_DEBUG("Femto: command LOG UAVSTATUSB 1 success");
+
+			} else {
+				FEMTO_ERR("Femto: command LOG UAVSTATUSB 1 failed");
+			}
+		}
+
 
 	} else {	/**< RTCM mode for base station */
 		activateCorrectionOutput();
@@ -620,35 +649,6 @@ int GPSDriverFemto::configure(unsigned &baudrate, const GPSConfig &config)
 	FEMTO_DEBUG("Femto: gps driver configure done")
 
 	return 0;
-}
-
-#define CRC32_POLYNOMIAL 0xEDB88320L
-uint32_t
-GPSDriverFemto::crc32Value(uint32_t icrc)
-{
-	int i;
-	uint32_t crc = icrc;
-
-	for (i = 8 ; i > 0; i--) {
-		if (crc & 1) {
-			crc = (crc >> 1) ^ CRC32_POLYNOMIAL;
-
-		} else {
-			crc >>= 1;
-		}
-	}
-
-	return crc;
-}
-
-uint32_t
-GPSDriverFemto::calculateBlockCRC32(uint32_t length, uint8_t *buffer, uint32_t crc)
-{
-	while (length-- != 0) {
-		crc = ((crc >> 8) & 0x00FFFFFFL) ^ (crc32Value(((uint32_t) crc ^ *buffer++) & 0xff));
-	}
-
-	return (crc);
 }
 
 void GPSDriverFemto::activateCorrectionOutput()
