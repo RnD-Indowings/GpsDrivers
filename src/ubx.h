@@ -224,7 +224,7 @@
 #define UBX_TX_CFG_PRT_PROTO_UBX                (1<<0)
 #define UBX_TX_CFG_PRT_PROTO_RTCM               (1<<5)
 
-#define UBX_BAUDRATE_M8_AND_NEWER               115200 /**< baudrate for M8+ boards */
+#define UBX_BAUDRATE_M8_AND_NEWER               460800 /**< baudrate for M8+ boards */
 
 /* TX CFG-RATE message contents
  * Note: not used with protocol version 27+ anymore

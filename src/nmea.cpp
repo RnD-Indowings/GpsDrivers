@@ -1055,37 +1055,43 @@ void GPSDriverNMEA::request_unicore_messages()
 	// Configure position messages on serial port. Don't save it though.
 	{
 		// position
-		uint8_t buf[] = "GPGGA COM1 0.2\r\n";
+		uint8_t buf[] = "GPGGA COM3 0.2\r\n";
 		write(buf, sizeof(buf) - 1);
 	}
 
 	{
 		// velocity
-		uint8_t buf[] = "UNIAGRICA COM1 0.2\r\n";
+		uint8_t buf[] = "UNIAGRICA COM3 0.2\r\n";
 		write(buf, sizeof(buf) - 1);
 	}
 
 	{
 		// heading
-		uint8_t buf[] = "UNIHEADINGA COM1 0.2\r\n";
+		uint8_t buf[] = "UNIHEADINGA COM3 0.2\r\n";
 		write(buf, sizeof(buf) - 1);
 	}
 
 	{
 		// eph, epv
-		uint8_t buf[] = "GPGST COM1 1.0\r\n";
+		uint8_t buf[] = "GPGST COM3 1.0\r\n";
 		write(buf, sizeof(buf) - 1);
 	}
 
 	{
 		// vdop
-		uint8_t buf[] = "GPGSA COM1 1.0\r\n";
+		uint8_t buf[] = "GPGSA COM3 1.0\r\n";
 		write(buf, sizeof(buf) - 1);
 	}
 
 	{
 		// time
-		uint8_t buf[] = "GPRMC COM1 1.0\r\n";
+		uint8_t buf[] = "GPRMC COM3 1.0\r\n";
+		write(buf, sizeof(buf) - 1);
+	}
+
+	{
+		// AGRICA/ velocity up
+		uint8_t buf[] = "AGRICA COM3 0.1\r\n";
 		write(buf, sizeof(buf) - 1);
 	}
 }
