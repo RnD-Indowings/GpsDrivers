@@ -58,7 +58,7 @@ public:
 	/**
 	 * @param heading_offset heading offset in radians [-pi, pi]. It is substracted from the measurement.
 	 */
-	GPSDriverNMEA(GPSCallbackPtr callback, void *callback_user,
+	GPSDriverNMEA(Interface gpsInterface, GPSCallbackPtr callback, void *callback_user,
 		      sensor_gps_s *gps_position,
 		      satellite_info_s *satellite_info,
 		      float heading_offset = 0.f);
@@ -74,6 +74,7 @@ private:
 
 	UnicoreParser _unicore_parser;
 	gps_abstime _unicore_heading_received_last;
+	const Interface _interface{};
 
 	enum class NMEADecodeState {
 		uninit,
