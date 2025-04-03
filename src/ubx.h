@@ -1092,6 +1092,7 @@ private:
 	 * @return size of the message (without any config values)
 	 */
 	int initCfgValset();
+	void initCfgCfg();
 
 	/**
 	 * Start or restart the survey-in procees. This is only used in RTCM ouput mode.

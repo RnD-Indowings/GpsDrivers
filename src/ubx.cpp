@@ -158,6 +158,7 @@ GPSDriverUBX::configure(unsigned &baudrate, const GPSConfig &config)
 				// for future transactions.
 				if (waitForAck(UBX_MSG_CFG_VALSET, 2000, true) == 0) {
 					cfg_valset_success = true;
+					initCfgCfg();
 				}
 			}
 
@@ -833,6 +834,17 @@ int GPSDriverUBX::configureDevice(const GPSConfig &config, const int32_t uart2_b
 	}
 
 	return 0;
+}
+
+void GPSDriverUBX::initCfgCfg()
+{
+	ubx_payload_tx_cfg_cfg_t cfg_msg;	// don't use _buf (allow interleaved operation)
+	memset(&cfg_msg, 0, sizeof(cfg_msg));
+
+	cfg_msg.clearMask = 0x00FFFF00;
+	cfg_msg.loadMask = 0x00FFFF00;
+
+	sendMessage(UBX_MSG_CFG_CFG, (uint8_t *)&cfg_msg, sizeof(cfg_msg));
 }
 
 int GPSDriverUBX::initCfgValset()
