@@ -882,6 +882,25 @@ bool GPSDriverUBX::cfgValsetPort(uint32_t key_id, uint8_t value, int &msg_size)
 	return true;
 }
 
+bool GPSDriverUBX::saveConfig()
+{
+	ubx_payload_tx_cfg_cfg_t cfg_msg;
+	memset(&cfg_msg,0,sizeof(cfg_msg));
+
+	cfg_msg.saveMask= 0x0000FFFF;
+	cfg_msg.deviceMask= 0x03; // BBR | FLASH
+
+	if(!sendMessage(UBX_MSG_CFG_CFG, (uint8_t *)&cfg_msg, sizeof(cfg_msg))) {
+		return false;
+	}
+
+	if(waitForAck(UBX_MSG_CFG_CFG, UBX_CONFIG_TIMEOUT, true) < 0) {
+		return false;
+	}
+
+	return true;
+}
+
 bool GPSDriverUBX::restartSurveyInWithoutRTCM()
 {
 	//stop it first

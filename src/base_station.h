@@ -84,6 +84,8 @@ public:
 		_base_settings.settings.fixed_position.position_accuracy = position_accuracy;
 	}
 
+ 	virtual bool saveConfig() { return true; }
+
 protected:
 	virtual bool restartSurveyInWithoutRTCM() { return true; }
 	enum class BaseSettingsType : uint8_t {

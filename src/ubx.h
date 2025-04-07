@@ -1016,6 +1016,7 @@ public:
 private:
 
 private:
+	bool saveConfig() override;
 	bool restartSurveyInWithoutRTCM() override;
 
 	int activateRTCMOutput(bool reduce_update_rate);
