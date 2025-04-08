@@ -890,6 +890,7 @@ bool GPSDriverUBX::saveConfig()
 	cfg_msg.saveMask= 0x0000FFFF;
 	cfg_msg.deviceMask= 0x03; // BBR | FLASH
 
+	_configured = false;
 	if(!sendMessage(UBX_MSG_CFG_CFG, (uint8_t *)&cfg_msg, sizeof(cfg_msg))) {
 		return false;
 	}
@@ -897,6 +898,7 @@ bool GPSDriverUBX::saveConfig()
 	if(waitForAck(UBX_MSG_CFG_CFG, UBX_CONFIG_TIMEOUT, true) < 0) {
 		return false;
 	}
+	_configured = true;
 
 	return true;
 }
