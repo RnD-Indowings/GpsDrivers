@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2018 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2023 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,36 +35,71 @@
 
 #include <cstdint>
 
-/* RTCM3 */
-#define RTCM3_PREAMBLE					0xD3
-#define RTCM_INITIAL_BUFFER_LENGTH			300		/**< initial maximum message length of an RTCM message */
 
-
-class RTCMParsing
+class UnicoreParser
 {
 public:
-	RTCMParsing();
-	~RTCMParsing();
+	enum class Result {
+		None,
+		WrongCrc,
+		WrongStructure,
+		GotHeading,
+		GotAgrica,
+		UnknownSentence,
+	};
 
-	/**
-	 * reset the parsing state
-	 */
-	void reset();
+	Result parseChar(char c);
 
-	/**
-	 * add a byte to the message
-	 * @param b
-	 * @return true if message complete (use @message to get it)
-	 */
-	bool addByte(uint8_t b);
+	struct Heading {
+		float heading_deg;
+		float heading_stddev_deg;
+		float baseline_m;
+	};
 
-	uint8_t *message() const { return _buffer; }
-	uint16_t messageLength() const { return _pos; }
-	uint16_t messageId() const { return (_buffer[3] << 4) | (_buffer[4] >> 4); }
+	struct Agrica {
+		float velocity_m_s;
+		float velocity_north_m_s;
+		float velocity_east_m_s;
+		float velocity_up_m_s;
+		float stddev_velocity_north_m_s;
+		float stddev_velocity_east_m_s;
+		float stddev_velocity_up_m_s;
+	};
+
+	Heading heading() const
+	{
+		return _heading;
+	}
+
+	Agrica agrica() const
+	{
+		return _agrica;
+	}
+
+	bool agricaValid() const { return _agrica_valid; }
 
 private:
-	uint8_t			*_buffer{nullptr};
-	uint16_t		_buffer_len{};
-	uint16_t		_pos{};						///< next position in buffer
-	uint16_t		_message_length{};					///< message length without header & CRC (both 3 bytes)
+	void reset();
+	bool crcCorrect() const;
+	bool isHeading() const;
+	bool isAgrica() const;
+	bool extractHeading();
+	bool extractAgrica();
+
+	// We have seen buffers with 540 bytes for AGRICA.
+	char _buffer[600];
+	unsigned _buffer_pos {0};
+	char _buffer_crc[9];
+	unsigned _buffer_crc_pos {0};
+
+	enum class State {
+		Uninit,
+		GotHashtag,
+		GotStar,
+	} _state {State::Uninit};
+
+	Heading _heading{};
+	Agrica _agrica{};
+
+	bool _agrica_valid{false};
 };

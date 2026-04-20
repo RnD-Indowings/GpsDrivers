@@ -40,10 +40,15 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include "../../definitions.h"
 
 #ifndef GPS_READ_BUFFER_SIZE
 #define GPS_READ_BUFFER_SIZE 150 ///< buffer size for the read() call. Messages can be longer than that.
+#endif
+
+#ifndef M_PI_F
+# define M_PI_F 3.14159265358979323846f
 #endif
 
 enum class GPSCallbackType {
@@ -80,6 +85,14 @@ enum class GPSCallbackType {
 	 * return: ignored
 	 */
 	gotRTCMMessage,
+
+	/**
+	 * Got a relative position message from the device.
+	 * data1: pointer to the message
+	 * data2: message length
+	 * return: ignored
+	 */
+	gotRelativePositionMessage,
 
 	/**
 	 * message about current survey-in status
@@ -149,12 +162,42 @@ class GPSHelper
 public:
 	enum class OutputMode : uint8_t {
 		GPS = 0,    ///< normal GPS output
+		GPSAndRTCM, ///< normal GPS+RTCM output
 		RTCM        ///< request RTCM output. This is used for (fixed position) base stations
 	};
 
 	enum class Interface : uint8_t {
 		UART = 0,
 		SPI
+	};
+
+	/**
+	 * Bitmask for GPS_1_GNSS and GPS_2_GNSS
+	 * No bits set should keep the receiver's default config
+	 */
+	enum class GNSSSystemsMask : int32_t {
+		RECEIVER_DEFAULTS = 0,
+		ENABLE_GPS =        1 << 0,
+		ENABLE_SBAS =       1 << 1,
+		ENABLE_GALILEO =    1 << 2,
+		ENABLE_BEIDOU =     1 << 3,
+		ENABLE_GLONASS =    1 << 4
+	};
+
+	enum class InterfaceProtocolsMask : int32_t {
+		ALL_DISABLED =        0,
+		I2C_IN_PROT_UBX =     1 << 0,
+		I2C_IN_PROT_NMEA =    1 << 1,
+		I2C_IN_PROT_RTCM3X =  1 << 2,
+		I2C_OUT_PROT_UBX =    1 << 3,
+		I2C_OUT_PROT_NMEA =   1 << 4,
+		I2C_OUT_PROT_RTCM3X = 1 << 5
+	};
+
+	struct GPSConfig {
+		OutputMode output_mode;
+		GNSSSystemsMask gnss_systems;
+		InterfaceProtocolsMask interface_protocols;
 	};
 
 
@@ -165,9 +208,10 @@ public:
 	 * configure the device
 	 * @param baud Input and output parameter: if set to 0, the baudrate will be automatically detected and set to
 	 *             the detected baudrate. If not 0, a fixed baudrate is used.
+	 * @param config GPS Config
 	 * @return 0 on success, <0 otherwise
 	 */
-	virtual int configure(unsigned &baud, OutputMode output_mode) = 0;
+	virtual int configure(unsigned &baud, const GPSConfig &config) = 0;
 
 	/**
 	 * receive & handle new data from the device
@@ -185,12 +229,17 @@ public:
 	 *         -1 not implemented
 	 * 	    0 success
 	 */
-	virtual int reset(GPSRestartType restart_type)	{ return -1; }
+	virtual int reset(GPSRestartType restart_type)	{ (void)restart_type; return -1; }
 
 	float getPositionUpdateRate() { return _rate_lat_lon; }
 	float getVelocityUpdateRate() { return _rate_vel; }
 	void resetUpdateRates();
 	void storeUpdateRates();
+
+	/**
+	 * Allow a driver to disable RTCM injection
+	 */
+	virtual bool shouldInjectRTCM() { return true; }
 
 protected:
 
@@ -205,7 +254,7 @@ protected:
 	 */
 	int read(uint8_t *buf, int buf_length, int timeout)
 	{
-		*((int *)buf) = timeout;
+		memcpy(buf, &timeout, sizeof(timeout));
 		return _callback(GPSCallbackType::readDeviceData, buf, buf_length, _callback_user);
 	}
 
@@ -241,6 +290,12 @@ protected:
 		_callback(GPSCallbackType::gotRTCMMessage, buf, buf_length, _callback_user);
 	}
 
+	/** got a relative position message from the device */
+	void gotRelativePositionMessage(sensor_gnss_relative_s &gnss_relative)
+	{
+		_callback(GPSCallbackType::gotRelativePositionMessage, &gnss_relative, sizeof(sensor_gnss_relative_s), _callback_user);
+	}
+
 	void setClock(timespec &t)
 	{
 		_callback(GPSCallbackType::setClock, &t, 0, _callback_user);
@@ -269,3 +324,13 @@ protected:
 
 	uint64_t _interval_rate_start{0};
 };
+
+inline bool operator&(GPSHelper::GNSSSystemsMask a, GPSHelper::GNSSSystemsMask b)
+{
+	return static_cast<int32_t>(a) & static_cast<int32_t>(b);
+}
+
+inline bool operator&(GPSHelper::InterfaceProtocolsMask a, GPSHelper::InterfaceProtocolsMask b)
+{
+	return static_cast<int32_t>(a) & static_cast<int32_t>(b);
+}

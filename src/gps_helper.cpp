@@ -32,7 +32,7 @@
  ****************************************************************************/
 
 #include "gps_helper.h"
-#include <cmath>
+#include <math.h>
 
 #ifndef M_PI
 #define M_PI		3.141592653589793238462643383280
@@ -46,8 +46,9 @@
  * @author Julian Oes <julian@oes.ch>
  */
 
-GPSHelper::GPSHelper(GPSCallbackPtr callback, void *callback_user)
-	: _callback(callback), _callback_user(callback_user)
+GPSHelper::GPSHelper(GPSCallbackPtr callback, void *callback_user) :
+	_callback(callback),
+	_callback_user(callback_user)
 {
 }
 

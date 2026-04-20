@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2018 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2023 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,40 +31,38 @@
  *
  ****************************************************************************/
 
-#pragma once
+#include "crc.h"
 
-#include <cstdint>
+// According to https://en.wikipedia.org/wiki/Cyclic_redundancy_check
+//
+// the CRC is based on the CRC-32 ISO 3309 / ANSI X3.66
+// implementetation, and the polynomial is supplied as "Reversed".
+//
+// The CRC algorithm was extracted from the Femtomes driver.
+//
 
-/* RTCM3 */
-#define RTCM3_PREAMBLE					0xD3
-#define RTCM_INITIAL_BUFFER_LENGTH			300		/**< initial maximum message length of an RTCM message */
+static constexpr uint32_t CRC32_POLYNOMIAL = 0xEDB88320;
 
-
-class RTCMParsing
+static uint32_t crc32Value(uint32_t crc)
 {
-public:
-	RTCMParsing();
-	~RTCMParsing();
+	for (int i = 8 ; i > 0; i--) {
+		if (crc & 1) {
+			crc = (crc >> 1) ^ CRC32_POLYNOMIAL;
 
-	/**
-	 * reset the parsing state
-	 */
-	void reset();
+		} else {
+			crc >>= 1;
+		}
+	}
 
-	/**
-	 * add a byte to the message
-	 * @param b
-	 * @return true if message complete (use @message to get it)
-	 */
-	bool addByte(uint8_t b);
+	return crc;
+}
 
-	uint8_t *message() const { return _buffer; }
-	uint16_t messageLength() const { return _pos; }
-	uint16_t messageId() const { return (_buffer[3] << 4) | (_buffer[4] >> 4); }
+uint32_t
+calculateCRC32(uint32_t length, uint8_t *buffer, uint32_t crc)
+{
+	while (length-- != 0) {
+		crc = ((crc >> 8) & 0x00FFFFFFL) ^ (crc32Value(((uint32_t) crc ^ *buffer++) & 0xff));
+	}
 
-private:
-	uint8_t			*_buffer{nullptr};
-	uint16_t		_buffer_len{};
-	uint16_t		_pos{};						///< next position in buffer
-	uint16_t		_message_length{};					///< message length without header & CRC (both 3 bytes)
-};
+	return crc;
+}

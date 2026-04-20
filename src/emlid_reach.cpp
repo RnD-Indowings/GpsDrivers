@@ -44,7 +44,6 @@
 #include <math.h>
 #include <string.h>
 #include <ctime>
-#include <cmath>
 #include <cstring>
 #include <errno.h>
 
@@ -72,18 +71,18 @@
 
 
 GPSDriverEmlidReach::GPSDriverEmlidReach(GPSCallbackPtr callback, void *callback_user,
-		struct vehicle_gps_position_s *gps_position, struct satellite_info_s *satellite_info) :
+		sensor_gps_s *gps_position, satellite_info_s *satellite_info) :
 	GPSHelper(callback, callback_user),
 	_gps_position(gps_position), _satellite_info(satellite_info)
 {}
 
 
 int
-GPSDriverEmlidReach::configure(unsigned &baudrate, OutputMode output_mode)
+GPSDriverEmlidReach::configure(unsigned &baudrate, const GPSConfig &config)
 {
 	// TODO RTK
-	if (output_mode != OutputMode::GPS) {
-		GPS_WARN("EMLIDREACH: Unsupported Output Mode %i", (int)output_mode);
+	if (config.output_mode != OutputMode::GPS) {
+		GPS_WARN("EMLIDREACH: Unsupported Output Mode %i", (int)config.output_mode);
 		return -1;
 	}
 
@@ -286,10 +285,10 @@ GPSDriverEmlidReach::handleErbSentence()
 		_gps_position->timestamp = gps_absolute_time();
 
 		_last_POS_timeGPS = _erb_buff.payload.geodic_position.timeGPS;
-		_gps_position->lon = round(_erb_buff.payload.geodic_position.longitude * 1e7);
-		_gps_position->lat = round(_erb_buff.payload.geodic_position.latitude * 1e7);
-		_gps_position->alt_ellipsoid = round(_erb_buff.payload.geodic_position.altElipsoid * 1e3);
-		_gps_position->alt = round(_erb_buff.payload.geodic_position.altMeanSeaLevel * 1e3);
+		_gps_position->longitude_deg = _erb_buff.payload.geodic_position.longitude;
+		_gps_position->latitude_deg = _erb_buff.payload.geodic_position.latitude;
+		_gps_position->altitude_ellipsoid_m = _erb_buff.payload.geodic_position.altElipsoid;
+		_gps_position->altitude_msl_m = _erb_buff.payload.geodic_position.altMeanSeaLevel;
 
 		_rate_count_lat_lon++;
 
